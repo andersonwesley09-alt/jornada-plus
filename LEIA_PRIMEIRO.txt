@@ -1,0 +1,61 @@
+JORNADA+ V5.2 — WEB / PWA
+========================
+
+1. O QUE ESTÁ PRONTO
+- Relógio digital ao vivo (HH:MM:SS), data com dia da semana e segundos em destaque na aba Ponto
+- Login e cadastro por e-mail e senha (dependem de Supabase configurado)
+- Modo de demonstração local, sem servidor
+- Registro de ponto automático, manual e com foto opcional
+- NOVO: Registro manual permite tirar foto ou escolher imagem da galeria, com prévia e remoção antes de salvar
+- As fotos anexadas ao registro manual aparecem na consulta da marcação e no histórico
+- Cálculo de horas e saldo; intervalos e jornadas personalizadas
+- Previsão da saída; 12x36 e turnos que atravessam a meia-noite
+- Calendário mensal, histórico e correções identificadas
+- Banco de horas com gráfico de evolução semanal
+- Relatório de espelho de ponto / banco de horas
+- Exportação .xlsx real e impressão/salvamento PDF
+- Tema claro/escuro e estrutura de PWA para instalação via HTTPS
+
+2. TESTAR AGORA, SEM CONTA
+- No computador, abra o arquivo Jornada_Plus_V5_2_Demonstracao.html, entregue separadamente.
+- Ou publique os arquivos deste ZIP. Abra index.html e clique em "Experimentar demonstração".
+- Os dados de demonstração são armazenados SOMENTE neste navegador.
+- "Criar conta" NÃO funciona no modo de demonstração sem configurar Supabase.
+
+3. ATIVAR CADASTRO REAL (IMPORTANTE)
+- Acesse https://supabase.com/dashboard e crie um projeto.
+- Abra SQL Editor > New query; execute o arquivo setup.sql.
+- Em Authentication > Sign In / Providers, habilite Email.
+- Copie Project URL e a chave PUBLICÁVEL (publishable/anon, não a secreta).
+- Edite config.js preenchendo url e anonKey, ou utilize CONFIGURADOR.html.
+- Publique a raiz deste ZIP no GitHub Pages.
+- Configure Authentication > URL Configuration > Site URL com o endereço do site publicado.
+- Ajuste também as URLs de redirecionamento para esse endereço.
+- Para confirmações por email de usuários externos, configure SMTP adequado no Supabase.
+- Teste duas contas diferentes para validar que registros e fotos não se misturam.
+- Nunca publique service_role nem outras chaves secretas no navegador.
+
+4. GITHUB PAGES
+- Crie um repositório do Jornada+ no GitHub.
+- Extraia o ZIP e envie os arquivos da raiz, incluindo index.html, app.js,
+  styles.css, config.js, icons, manifest.webmanifest e sw.js.
+- Em Settings > Pages, selecione Deploy from a branch, branch main e pasta /root.
+- Aguarde o GitHub gerar o link. O app poderá ser instalado via menu do navegador.
+- GitHub Pages não é banco de dados: o Supabase é necessário para contas online.
+
+5. OBSERVAÇÕES
+- O arquivo HTML de demonstração não cria contas reais, nem sincroniza com outros aparelhos.
+- O registro offline em contas online, notificações com o app fechado e biometria
+  não foram implementados nesta versão.
+- O cálculo considera apenas dias com as marcações completas; dias sem ponto
+  não são debitados automaticamente. Ajuste manualmente feriados/folgas.
+- Controle pessoal: NÃO substitui sistema oficial de ponto eletrônico.
+- Fotos e marcações manuais não comprovam autenticidade de horário ou identidade.
+- Não publique suas contas reais sem testar as regras de acesso e políticas de privacidade.
+- A conta demonstrativa é apenas local; não use registros de teste como evidência trabalhista.
+
+V5.2 — TESTE DE ANEXO MANUAL
+- Acesse Experimentar demonstração > Ponto > Informar horário manualmente.
+- Escolha Tirar foto ou Escolher imagem, confirme a prévia e salve o horário.
+- Em Marcações do dia ou Histórico > Ver/corrigir horários, abra o botão de foto.
+- Os anexos de demonstração ficam no navegador; para contas reais, é necessário ativar o Supabase e a política privada do bucket ponto-fotos.

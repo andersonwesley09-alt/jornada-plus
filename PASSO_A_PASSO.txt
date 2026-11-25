@@ -1,0 +1,63 @@
+JORNADA+ — ATIVAR LOGIN REAL NO SUPABASE
+========================================
+
+IMPORTANTE: não é possível criar uma conta real sem um projeto Supabase.
+O app já contém cadastro, autenticação, banco de horas, histórico e foto opcional.
+
+1) ACESSAR O SUPABASE
+- https://supabase.com/dashboard
+- Criar um projeto separado para o Jornada+ (nome sugerido: jornada-plus).
+- Anotar a senha do banco em local seguro. A senha do banco NÃO vai no app.
+
+2) CRIAR AS TABELAS E PERMISSÕES
+- No projeto Supabase, clique SQL Editor > New query.
+- Abra setup.sql deste pacote; copie todo o conteúdo e execute no SQL Editor.
+- Confira se aparece sucesso sem mensagens de erro.
+- O script cria jornada_profiles, jornada_marks, jornada_notes e o bucket privado ponto-fotos.
+- RLS restringe o acesso aos dados do próprio usuário.
+
+3) HABILITAR O LOGIN
+- Authentication > Providers > Email: ativar autenticação Email.
+- Para uso público, mantenha a confirmação de e-mail ativada.
+- ATENÇÃO: o serviço gratuito padrão de e-mail Supabase não envia para qualquer
+  destinatário; configure SMTP próprio para permitir cadastros gerais.
+- Para teste inicial, pode usar um e-mail autorizado na equipe do projeto.
+
+4) CONFIGURAR O APLICATIVO
+- Em Project Settings > API Keys, copie a chave PUBLISHABLE (sb_publishable_...).
+- Em Project Settings / Connect, copie a Project URL (https://xxxxx.supabase.co).
+- Abra CONFIGURADOR.html, preencha URL e chave publicável, clique Gerar config.js.
+- Substitua o config.js original deste pacote pelo arquivo gerado.
+- NUNCA use service_role, sb_secret_ ou qualquer chave privada.
+
+5) PUBLICAR SITE (HTTPS)
+- No GitHub, crie um repositório para o Jornada+ e envie os arquivos do app na RAIZ:
+  index.html, app.js, styles.css, config.js, setup.sql NÃO PRECISA publicar,
+  icon.png, manifest.webmanifest.
+- Settings > Pages > Deploy from a branch > main > /(root) > Save.
+- Aguarde até o GitHub mostrar a URL do site em https://...github.io/...
+- Recomenda-se não publicar setup.sql/CONFIGURADOR.html; mantenha só localmente.
+
+6) CONFIGURAR E-MAILS E REDIRECIONAMENTO
+- Supabase > Authentication > URL Configuration:
+  Site URL: link HTTPS exato do site Jornada+ no GitHub Pages.
+  Additional Redirect URLs: adicione o mesmo link com /* para callbacks.
+- Não use file:/// para concluir confirmação ou recuperação de senha.
+
+7) TESTAR
+- Abra o link do site no celular ou PC.
+- Clique Criar conta > coloque seu nome, seu e-mail real e uma senha forte.
+- Confirme a conta pelo e-mail quando solicitado; então entre com e-mail e senha.
+- Cadastre o ponto e confira dados. Crie uma SEGUNDA conta com outro e-mail,
+  entre nela e verifique que não enxerga registros da primeira.
+- Foto continua opcional.
+
+ERROS COMUNS:
+- Botão Criar conta cinza: config.js não foi preenchido/carregado na página.
+- Conta criada, mas e-mail não chega: sem SMTP para destinatário não autorizado;
+  conferir configuração de SMTP, limites e spam.
+- Falha ao carregar perfil: script setup.sql não foi executado no projeto correto.
+- Página funciona no computador mas não no celular: publicar HTTPS no GitHub Pages.
+- Abra o DevTools/network para conferir erro na API apenas se necessário.
+
+O Jornada+ é controle pessoal de horários, NÃO substitui sistema oficial de ponto.

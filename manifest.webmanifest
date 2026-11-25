@@ -1,0 +1,25 @@
+{
+  "name": "Jornada+ — Meu ponto",
+  "short_name": "Jornada+",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7ff",
+  "theme_color": "#0c4ad8",
+  "description": "Registre seu ponto e acompanhe seu banco de horas com uma conta pessoal.",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
