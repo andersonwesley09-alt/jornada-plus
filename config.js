@@ -1,6 +1,5 @@
-// Preencha somente a URL do projeto e a chave publicável/anon do Supabase.
-// NUNCA coloque a service_role key aqui. Ela é secreta e ignora permissões de acesso.
+// Gerado pelo configurador Jornada+ (chave publicável, sem segredos).
 window.JORNADA_SUPABASE = {
-  url: '',
-  anonKey: ''
+  "url": "https://hsvkjtzpuxejfyslkinh.supabase.co",
+  "anonKey": "sb_publishable_2wvGsmGCO5QyATmlB8nNUw_54MmEXgw"
 };
