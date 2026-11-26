@@ -78,3 +78,42 @@ body.theme-dark .manual-attachment-heading{color:#eef4ff}
 body.theme-dark .manual-attach-button{background:#243b64;color:#d0e1ff;border-color:#3b5279}
 body.theme-dark .manual-photo-preview{background:#1b3152;border-color:#3b5279}
 @media(max-width:360px){.manual-attachment-actions{gap:6px}.manual-attach-button{font-size:11px;padding:8px 4px}}
+
+/* Jornada+ V5.2 - Correção do dia: campos pendentes e prévia do saldo */
+.edit-hint{font-size:12px;line-height:1.55;color:var(--muted);margin:0 0 13px}
+.edit-row-missing{background:rgba(28,82,214,.035);padding:12px;border:1px dashed var(--border);border-radius:12px;margin:7px 0}
+.edit-row-missing .field>span{color:var(--blue)}
+.edit-preview{margin:12px 0 16px;padding:13px 14px;border:1px solid var(--border);border-radius:13px;background:var(--surface);display:flex;flex-direction:column;gap:4px;font-size:12px;line-height:1.5}
+.edit-preview strong{font-size:13px}.edit-preview span{color:var(--muted)}
+.edit-preview.edit-warning{border-color:#efcbd0;color:var(--red);background:#fff5f6}
+body.theme-dark .edit-row-missing{background:#1a3152}body.theme-dark .edit-preview.edit-warning{color:#ff9dad;background:#432432;border-color:#814050}
+
+/* Jornada+ V5.2 — miniaturas e gestão individual de fotos (mesma versão) */
+.mark-row .mark-main{flex:1;min-width:0}
+.mark-row .mark-time{white-space:nowrap}
+.photo-thumb{width:51px;min-width:51px;display:flex;flex-direction:column;align-items:center;gap:2px;border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:4px;color:var(--blue);cursor:pointer}
+.photo-thumb img{display:block;width:40px;height:37px;border-radius:6px;object-fit:cover;background:linear-gradient(125deg,#d6e6ff,#edf4ff);font-size:0}
+.photo-thumb span{font-size:10px;font-weight:700;line-height:1.1}
+.photo-thumb.photo-unavailable img{opacity:.2}
+.photo-add-inline{background:transparent;border:1px dashed var(--border);color:var(--blue);font-size:10px;font-weight:750;padding:5px;border-radius:8px;white-space:nowrap}
+.day-photo-strip{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;max-width:240px}
+.day-card button.photo-thumb{padding:4px;background:var(--surface);border:1px solid var(--border);text-align:center}
+.day-card .photo-thumb span{color:var(--blue)}
+.edit-photo-row{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
+.edit-photo-controls{padding:0 0 4px}
+.photo-waiting-hint{color:var(--muted);font-size:11px;margin:8px 0 0}
+.photo-manager-display{display:flex;align-items:center;justify-content:center;min-height:170px;border-radius:13px;background:var(--surface);border:1px dashed var(--border);padding:10px;margin:13px 0}
+.photo-manager-display img{max-height:45vh;width:100%;max-width:100%;object-fit:contain;border-radius:10px}
+.photo-manager-display p{font-size:12px;line-height:1.5;color:var(--muted);text-align:center;margin:12px}
+.photo-manager-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.photo-manager-actions button{margin:0;min-width:0;font-size:12px}
+.photo-manager-modal #managePhotoRemove{margin:7px 0}
+.photo-manager-modal #managePhotoSave{margin:12px 0 5px}
+@media(max-width:360px){.photo-manager-actions{grid-template-columns:1fr}.mark-row{gap:6px}.photo-thumb{width:46px;min-width:46px}.photo-thumb img{width:36px;height:34px}}
+body.theme-dark .photo-thumb,body.theme-dark .photo-manager-display{background:var(--surface);border-color:var(--border)}
+
+/* Login e recuperação individual sem e-mail — V5.2 */
+.recovery-code-modal .recovery-code{padding:18px 10px;margin:18px 0 8px;border:1px dashed #8da6e5;border-radius:13px;background:#eaf1ff;color:#173dab;font-size:clamp(12px,3.5vw,16px);font-weight:850;letter-spacing:.2px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums;user-select:all}
+.recovery-code-modal .primary{margin-top:15px}
+body.theme-dark .recovery-code-modal .recovery-code{background:#1b2c4e;color:#c5dbff;border-color:#4f70b8}
+#recoveryForm .primary{margin-top:10px}

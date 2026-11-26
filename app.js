@@ -7,6 +7,7 @@ const LABELS4=['Entrada','Saída para intervalo','Retorno do intervalo','Saída'
 const LABELS2=['Entrada','Saída'];
 let api=null,realApi=null,user=null,profile=null,marks=[],notes=[],busy=false,authMode='login',activeTab='ponto',modalDay=null,clockTimer=null,authReady=false,isDemo=false,calendarView=new Date(new Date().getFullYear(),new Date().getMonth(),1),calendarFocus=null;
 let manualPhotoFile=null,manualPhotoObjectUrl=null,manualPhotoSourceLabel='';
+let managedPhotoMarkId=null,managedPhotoFile=null,managedPhotoUrl=null,managedPhotoRemove=false;
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>dayKey(new Date());
 function dayKey(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
@@ -62,38 +63,150 @@ function predictedExit(d,arr=recordsOf(d)){
  return {at:new Date(time),note,estimated};
 }
 function groupDays(){return [...new Set(marks.map(r=>r.day))].sort().reverse();}
+function photoThumb(m,style='compact'){
+ if(!m?.photo_path)return '';
+ return `<button class="photo-thumb ${style==='day'?'photo-thumb-day':''}" type="button" data-manage-photo="${escapeHtml(m.id)}" aria-label="Ver ou editar imagem da marcação de ${escapeHtml(dateLabel(m.day))}"><img data-thumb-id="${escapeHtml(m.id)}" alt="Miniatura da imagem anexada"><span>Foto</span></button>`;
+}
+async function signedPhotoUrl(m){
+ if(!m?.photo_path)return null;
+ const {data,error}=await api.storage.from('ponto-fotos').createSignedUrl(m.photo_path,120);
+ if(error)throw error;
+ return data?.signedUrl||null;
+}
+function hydratePhotoThumbs(scope=document){
+ for(const img of scope.querySelectorAll('img[data-thumb-id]')){
+  const id=img.dataset.thumbId,m=marks.find(x=>x.id===id),path=m?.photo_path;
+  if(!path||img.dataset.loadedPath===path)continue;
+  img.dataset.loadedPath=path;
+  signedPhotoUrl(m).then(url=>{
+   if(!img.isConnected||marks.find(x=>x.id===id)?.photo_path!==path)return;
+   if(!url)throw new Error('Imagem indisponível.');
+   img.src=url;
+  }).catch(()=>{
+   if(!img.isConnected)return;
+   img.closest('.photo-thumb')?.classList.add('photo-unavailable');
+   img.closest('.photo-thumb')?.setAttribute('title','Imagem não encontrada. Você pode substituí-la.');
+  });
+ }
+}
 function bankStats(){let plus=0,minus=0,completed=0;for(const d of groupDays()){const b=balance(d);if(b===null)continue;completed++;if(b>=0)plus+=b;else minus-=b;}return {plus,minus,completed,total:plus-minus};}
 function recordingDay(){const now=today(),prior=parseDay(now);prior.setDate(prior.getDate()-1);const yesterday=dayKey(prior);const a=recordsOf(yesterday);if(a.length&&!complete(yesterday,a)){const first=new Date(a[0].at);const hours=Date.now()-first.getTime();if(hours>=0&&hours<24*3600000&&(first.getHours()>=17||profile?.schedule?.preset==='12x36'))return yesterday;}return now;}
 function clock(){const d=new Date();const two=n=>String(n).padStart(2,'0');$('clockMain').textContent=two(d.getHours())+':'+two(d.getMinutes());$('clockSeconds').textContent=':'+two(d.getSeconds());$('todayDate').textContent=d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});if(user&&profile)updateRemaining();}
-function setAuthMode(mode){authMode=mode;const signup=mode==='signup';$('nameField').hidden=!signup;$('authName').required=signup;$('authPassword').autocomplete=signup?'new-password':'current-password';$('authTitle').textContent=signup?'Crie sua conta grátis':'Bem-vindo de volta';$('authSubtitle').textContent=signup?'Seus pontos ficam disponíveis quando você entrar.':'Entre para ver seus registros.';$('authSubmit').textContent=signup?'Criar minha conta':'Entrar na minha conta';$('forgotPassword').hidden=signup;['modeLogin','modeSignup'].forEach((id,i)=>{const sel=(i===1)===signup;$(id).classList.toggle('selected',sel);$(id).setAttribute('aria-selected',String(sel));});$('authMessage').hidden=true;}
-function setBusy(value){busy=value;for(const id of ['registerNow','photoRegister','openManual','authSubmit','saveSettings'])$(id).disabled=value;}
-async function onAuthSubmit(e){e.preventDefault();if(!api||busy)return;const email=$('authEmail').value.trim().toLowerCase(),password=$('authPassword').value,name=$('authName').value.trim();if(authMode==='signup'&&name.length<2){authMessage('Informe seu nome.',true);return;}setBusy(true);$('authMessage').hidden=true;try{
- let data,error;if(authMode==='signup')({data,error}=await api.auth.signUp({email,password,options:{data:{name}}}));else ({data,error}=await api.auth.signInWithPassword({email,password}));if(error)throw error;
- if(authMode==='signup'&&!data.session){authMessage('Conta solicitada! Confira seu e-mail e confirme o cadastro antes de entrar.');setAuthMode('login');authMessage('Conta solicitada! Confira seu e-mail e confirme o cadastro antes de entrar.');}
- else if(data.session){await enter(data.session.user);notify(authMode==='signup'?'Conta criada com sucesso!':'Bem-vindo ao Jornada+!');}
-}catch(err){authMessage(err.message||'Falha no acesso. Confira seu e-mail e senha.',true);}finally{setBusy(false);}}
-async function forgot(){if(!api)return;const email=$('authEmail').value.trim();if(!email){authMessage('Digite seu e-mail no campo acima.',true);return;}try{const {error}=await api.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(error)throw error;authMessage('Se esse e-mail estiver cadastrado, você receberá as instruções para recuperar sua senha.');}catch(e){authMessage(e.message,true);}}
-async function resetPassword(){if(!api)return;const email=user?.email||$('authEmail').value.trim();if(!email){notify('Não foi possível identificar o e-mail.',true);return;}try{const {error}=await api.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(error)throw error;notify('Verifique o e-mail para redefinir sua senha.');}catch(e){fail(e);}}
-async function changePassword(){const pwd=prompt('Digite uma nova senha (mínimo 6 caracteres):');if(pwd===null)return;if(pwd.length<6){notify('Senha muito curta.',true);return;}const confirmPwd=prompt('Repita a nova senha:');if(pwd!==confirmPwd){notify('As senhas não coincidem.',true);return;}const {error}=await api.auth.updateUser({password:pwd});if(error)fail(error);else notify('Senha alterada.');}
+const ACCOUNT_DOMAIN='contas.jornada.test'; // e-mail técnico interno do Supabase: NÃO é solicitado ao usuário.
+const USERNAME_RE=/^[a-z][a-z0-9_-]{3,23}$/;
+function usernameOf(value){return String(value||'').trim().toLowerCase();}
+function technicalEmail(username){return `${username}@${ACCOUNT_DOMAIN}`;}
+let currentRecoveryCode='',nextRecoveryStep=null;
+function setAuthMode(mode){
+ authMode=mode;const signup=mode==='signup',recovery=mode==='recovery';
+ $('authForm').hidden=recovery;$('recoveryForm').hidden=!recovery;
+ $('nameField').hidden=!signup;$('confirmField').hidden=!signup;
+ $('authName').required=signup;$('authConfirm').required=signup;
+ $('authPassword').autocomplete=signup?'new-password':'current-password';
+ $('authTitle').textContent=recovery?'Recuperar acesso':signup?'Crie sua conta grátis':'Bem-vindo de volta';
+ $('authSubtitle').textContent=recovery?'Recupere usando seu código pessoal.':signup?'Sem e-mail e sem vínculo com empresas.':'Entre com seu usuário e senha.';
+ $('authSubmit').textContent=signup?'Criar minha conta':'Entrar na minha conta';
+ $('forgotPassword').hidden=signup||recovery;
+ $('modeLogin').classList.toggle('selected',mode==='login');$('modeSignup').classList.toggle('selected',signup);
+ $('modeLogin').setAttribute('aria-selected',String(mode==='login'));$('modeSignup').setAttribute('aria-selected',String(signup));
+ $('authMessage').hidden=true;
+}
+function setBusy(value){busy=value;for(const id of ['registerNow','photoRegister','openManual','authSubmit','recoverSubmit','saveSettings'])$(id).disabled=value;}
+async function accountAction(action,body={},asUser=false){
+ const config=window.JORNADA_SUPABASE||{};
+ if(!config.url||!config.anonKey)throw new Error('Conecte o Supabase antes de cadastrar contas.');
+ const headers={'Content-Type':'application/json','apikey':config.anonKey};
+ if(asUser){const {data,error}=await realApi.auth.getSession();if(error||!data.session)throw new Error('Faça login para continuar.');headers.Authorization='Bearer '+data.session.access_token;}
+ // Sem segredos nem chave de administrador no navegador.
+ let res;
+ try{res=await fetch(`${config.url.replace(/\/$/,'')}/functions/v1/jornada-contas`,{method:'POST',headers,body:JSON.stringify({action,...body})});}
+ catch{throw new Error('Não foi possível conectar ao servidor de contas. Confira a internet.');}
+ let payload={};try{payload=await res.json();}catch{}
+ if(!res.ok)throw new Error(payload.error||'Serviço de contas indisponível. Confira a função jornada-contas no Supabase.');
+ return payload;
+}
+function showRecoveryCode(code,title,help,onDone){
+ currentRecoveryCode=code;nextRecoveryStep=onDone||null;
+ $('codeModalTitle').textContent=title||'Guarde seu código de recuperação';
+ $('codeModalHelp').textContent=help||'Este código só aparece agora. Sem ele não é possível recuperar a conta sem e-mail.';
+ $('recoveryCodeText').textContent=code;
+ $('savedRecovery').checked=false;$('ackRecovery').disabled=true;
+ $('recoveryCodeModal').hidden=false;
+}
+async function onAuthSubmit(e){
+ e.preventDefault();if(!api||busy)return;
+ const username=usernameOf($('authUsername').value),password=$('authPassword').value,name=$('authName').value.trim();
+ if(!USERNAME_RE.test(username)){authMessage('Use de 4 a 24 caracteres: comece com letra; use apenas letras, números, _ ou -.',true);return;}
+ if(authMode==='signup'&&name.length<2){authMessage('Informe seu nome.',true);return;}
+ if(authMode==='signup'&&(password.length<10||password!==$('authConfirm').value)){authMessage('Use senha com pelo menos 10 caracteres e confirme a mesma senha.',true);return;}
+ setBusy(true);$('authMessage').hidden=true;
+ try{
+  if(authMode==='signup'){
+   const created=await accountAction('register',{username,password,name});
+   showRecoveryCode(created.recovery_code,'Conta criada! Guarde seu código',
+      'Este código é pessoal e será necessário se você esquecer a senha. Ele não será exibido novamente.',
+      async()=>{
+       setAuthMode('login');$('authUsername').value=username;$('authPassword').value='';$('authConfirm').value='';
+       authMessage('Conta criada. Entre com seu usuário e senha.');
+      });
+  }else{
+   const {data,error}=await api.auth.signInWithPassword({email:technicalEmail(username),password});
+   if(error)throw new Error('Usuário ou senha incorretos.');
+   if(data.session){await enter(data.session.user);notify('Bem-vindo ao Jornada+!');}
+  }
+ }catch(err){authMessage(err.message||'Não foi possível acessar sua conta.',true);}finally{setBusy(false);}
+}
+function forgot(){
+ $('recoverUsername').value=usernameOf($('authUsername').value);setAuthMode('recovery');
+}
+async function onRecoverSubmit(e){
+ e.preventDefault();if(busy)return;
+ const username=usernameOf($('recoverUsername').value),code=$('recoverCode').value.trim(),password=$('recoverPassword').value;
+ if(!USERNAME_RE.test(username)||password.length<10||password!==$('recoverConfirm').value){authMessage('Confira usuário, senha de 10 caracteres e confirmação.',true);return;}
+ setBusy(true);$('authMessage').hidden=true;
+ try{
+  const ret=await accountAction('recover',{username,code,password});
+  showRecoveryCode(ret.recovery_code,'Senha alterada! Novo código',
+   'O código antigo deixou de funcionar. Salve este novo código para recuperar sua conta futuramente.',
+   ()=>{setAuthMode('login');$('authUsername').value=username;$('authPassword').value='';authMessage('Senha redefinida. Entre com a nova senha.');});
+ }catch(err){authMessage(err.message,true);}finally{setBusy(false);}
+}
+async function resetPassword(){
+ if(isDemo)return notify('Faça login em uma conta online para gerar o código.',true);
+ try{const ret=await accountAction('rotate',{},true);showRecoveryCode(ret.recovery_code,'Novo código de recuperação',
+ 'O código anterior foi invalidado. Guarde o novo código em um local seguro.',()=>notify('Código renovado com segurança.'));}
+ catch(e){fail(e);}
+}
+async function changePassword(){
+ if(isDemo)return notify('Disponível nas contas online.',true);
+ const pwd=prompt('Digite uma nova senha (mínimo 10 caracteres):');if(pwd===null)return;
+ if(pwd.length<10){notify('A senha deve ter pelo menos 10 caracteres.',true);return;}
+ const confirmPwd=prompt('Repita a nova senha:');if(pwd!==confirmPwd){notify('As senhas não coincidem.',true);return;}
+ const {error}=await api.auth.updateUser({password:pwd});if(error)fail(error);else notify('Senha alterada.');
+}
 async function ensureProfile(){const {data,error}=await api.from('jornada_profiles').select('*').eq('id',user.id).maybeSingle();if(error)throw error;if(data)return data;const newProfile={id:user.id,name:user.user_metadata?.name||user.email?.split('@')[0]||'Meu perfil',schedule:presetSettings('6x1')};const ret=await api.from('jornada_profiles').upsert(newProfile,{onConflict:'id'}).select('*').single();if(ret.error)throw ret.error;return ret.data;}
 async function enter(u){if(!u)return;if(user?.id===u.id&&profile&&authReady)return;user=u;authReady=false;try{profile=await ensureProfile();await loadMarks();await loadNotes();$('authScreen').hidden=true;$('appScreen').hidden=false;$('navBar').hidden=false;$('accountSummary').hidden=false;authReady=true;render();selectTab('ponto');}catch(e){console.error(e);user=null;profile=null;marks=[];$('authScreen').hidden=false;$('appScreen').hidden=true;$('navBar').hidden=true;$('accountSummary').hidden=true;authMessage('Não foi possível carregar a conta. Confira se o setup.sql foi executado no Supabase. Detalhes: '+e.message,true);}}
 async function loadMarks(){const {data,error}=await api.from('jornada_marks').select('*').eq('user_id',user.id).order('day',{ascending:false}).order('mark_idx',{ascending:true}).limit(5000);if(error)throw error;marks=data||[];}
 async function loadNotes(){const {data,error}=await api.from('jornada_notes').select('*').eq('user_id',user.id).limit(5000);if(error)throw error;notes=data||[];}
 async function refresh(){await loadMarks();await loadNotes();render();}
 async function signOut(){if(isDemo){isDemo=false;api=realApi;exit();return;}if(!api)return;const {error}=await api.auth.signOut();if(error){fail(error);return;}exit();}
-function exit(){user=null;profile=null;marks=[];notes=[];authReady=false;$('demoBadge').hidden=true;$('appScreen').hidden=true;$('navBar').hidden=true;$('accountSummary').hidden=true;$('authScreen').hidden=false;setAuthMode('login');}
-function render(){if(!user||!profile)return;clock();const name=profile.name||'Meu perfil';$('userMiniName').textContent=name.split(' ')[0];$('welcomeName').textContent=`Olá, ${name.split(' ')[0]}! Registre seu horário de forma simples.`;$('profileName').value=name;$('profileEmail').textContent=isDemo?'Demonstração local — não é uma conta online':user.email;$('demoBadge').hidden=!isDemo;$('demoTools').hidden=!isDemo;$('requestReset').disabled=isDemo;
+function exit(){clearManagedPhotoSelection();managedPhotoMarkId=null;user=null;profile=null;marks=[];notes=[];authReady=false;$('demoBadge').hidden=true;$('appScreen').hidden=true;$('navBar').hidden=true;$('accountSummary').hidden=true;$('authScreen').hidden=false;setAuthMode('login');}
+function render(){if(!user||!profile)return;clock();const name=profile.name||'Meu perfil';$('userMiniName').textContent=name.split(' ')[0];$('welcomeName').textContent=`Olá, ${name.split(' ')[0]}! Registre seu horário de forma simples.`;$('profileName').value=name;$('profileUsername').textContent=isDemo?'Demonstração local — não é uma conta online':('@'+(user.user_metadata?.username||usernameOf(user.email?.split('@')[0])));$('demoBadge').hidden=!isDemo;$('demoTools').hidden=!isDemo;$('requestReset').disabled=isDemo;$('changeMyPassword').disabled=isDemo;
  const d=recordingDay(),arr=recordsOf(d),labels=dayLabels(d,arr),plan=dayPlan(d,arr);$('schedulePill').textContent=plan.scheduled?`Meta ${hr(plan.goal_minutes)}`:'Folga';$('nextLabel').textContent=arr.length<labels.length?labels[arr.length]:'Jornada concluída';$('nextDescription').textContent=arr.length<labels.length?(d===today()?'Registre o horário atual ou informe manualmente.':'Continuação de jornada iniciada ontem.'):'Todas as marcações desse dia foram realizadas.';$('registerNow').disabled=busy||arr.length>=labels.length;$('photoRegister').disabled=busy||arr.length>=labels.length;
  $('dayState').textContent=complete(d,arr)?'Concluído':arr.length?'Em andamento':'Sem registros';
  const forecast=predictedExit(d,arr),forecastDate=forecast?.at;
  $('exitForecast').hidden=!forecast;
  if(forecast){$('exitForecastValue').textContent=timeOf(forecastDate.toISOString())+(dayKey(forecastDate)!==d?' (+1 dia)':'');$('exitForecastNote').textContent=forecast.note+'.';updateRemaining();}
- $('todayMarks').innerHTML=labels.map((label,i)=>{const m=arr[i];return `<div class="mark-row"><div class="step-circle ${m?'done':''}">${m?'✓':'◷'}</div><div class="mark-main"><div class="mark-title">${label}</div><div class="mark-desc">${m?(m.manual?'Manual':'Automático')+(m.photo_path?(m.manual?' · Com imagem':' · Com foto'):'')+(m.original_at?' · Corrigido':''):'Aguardando'}</div></div>${m?`<div class="mark-time">${timeOf(m.at)}${dayKey(new Date(m.at))!==d?' +1d':''}</div>${m.photo_path?`<button class="thumb-button" type="button" data-photo="${escapeHtml(m.id)}">Foto</button>`:''}`:(forecast&&i===labels.length-1?`<div class="mark-forecast"><strong>${timeOf(forecastDate.toISOString())}</strong><span>Prevista${dayKey(forecastDate)!==d?' · +1 dia':''}</span></div>`:'<div class="small-label">—</div>')}</div>`;}).join('');
+ $('todayMarks').innerHTML=labels.map((label,i)=>{const m=arr[i];return `<div class="mark-row"><div class="step-circle ${m?'done':''}">${m?'✓':'◷'}</div><div class="mark-main"><div class="mark-title">${label}</div><div class="mark-desc">${m?(m.manual?'Manual':'Automático')+(m.photo_path?(m.manual?' · Com imagem':' · Com foto'):'')+(m.original_at?' · Corrigido':''):'Aguardando'}</div></div>${m?`<div class="mark-time">${timeOf(m.at)}${dayKey(new Date(m.at))!==d?' +1d':''}</div>${m.photo_path?photoThumb(m):`<button type="button" class="photo-add-inline" data-manage-photo="${escapeHtml(m.id)}">+ Foto</button>`}`:(forecast&&i===labels.length-1?`<div class="mark-forecast"><strong>${timeOf(forecastDate.toISOString())}</strong><span>Prevista${dayKey(forecastDate)!==d?' · +1 dia':''}</span></div>`:'<div class="small-label">—</div>')}</div>`;}).join('');
  const s=bankStats();for(const id of ['homeBalance','totalBalance']){const el=$(id);el.textContent=signed(s.total);el.classList.toggle('minus',s.total<0);}$('positiveTotal').textContent=hr(s.plus);$('negativeTotal').textContent=hr(s.minus);$('completedCount').textContent=`${s.completed} ${s.completed===1?'dia concluído':'dias concluídos'}`;$('dailyTarget').textContent=profile.schedule?.preset==='custom'?'Meta por dia':`Jornada ${profile.schedule?.preset||'6x1'}`;
  const days=groupDays();$('bankDays').innerHTML=days.length?days.map(d=>dayCard(d,true)).join(''):'<div class="card empty">Nenhum registro ainda. Use a aba Ponto para começar.</div>';
  $('historyDays').innerHTML=days.length?days.map(d=>dayCard(d,false)).join(''):'<div class="card empty">Seu histórico aparecerá aqui assim que registrar o primeiro ponto.</div>';
- fillSettings();renderCalendar();renderBankChart();renderReports();renderCorrections();}
-function dayCard(d,isBank){const a=recordsOf(d),b=balance(d,a),p=dayPlan(d,a),summary=b===null?'Incompleto':signed(b);return `<section class="card day-card"><div><div class="title">${dateLabel(d)}</div><p>${b===null?'Marcação incompleta':`${hr(worked(d,a))} trabalhadas · ${p.scheduled?'Trabalho':'Folga'}`}${a.some(m=>m.photo_path)?' · Com imagem':''}${notes.some(n=>n.day===d)?' · Com observação':''}</p><button type="button" data-edit="${d}">Ver / corrigir horários</button></div><b class="diff ${b===null?'':b<0?'minus':'plus'}">${summary}</b></section>`;}
+ fillSettings();renderCalendar();renderBankChart();renderReports();renderCorrections();hydratePhotoThumbs();}
+function dayCard(d,isBank){
+ const a=recordsOf(d),b=balance(d,a),p=dayPlan(d,a),summary=b===null?'Incompleto':signed(b);
+ const photos=a.filter(m=>m.photo_path);
+ return `<section class="card day-card"><div><div class="title">${dateLabel(d)}</div><p>${b===null?'Marcação incompleta':`${hr(worked(d,a))} trabalhadas · ${p.scheduled?'Trabalho':'Folga'}`}${photos.length?' · Com imagem':''}${notes.some(n=>n.day===d)?' · Com observação':''}</p><button type="button" data-edit="${d}">Ver / corrigir horários</button>${photos.length?`<div class="day-photo-strip">${photos.map(m=>photoThumb(m,'day')).join('')}</div>`:''}</div><b class="diff ${b===null?'':b<0?'minus':'plus'}">${summary}</b></section>`;
+}
 function selectTab(name){if(!['ponto','banco','calendario','historico','relatorios','perfil'].includes(name))return;activeTab=name;for(const n of ['ponto','banco','calendario','historico','relatorios','perfil'])$('panel-'+n).hidden=name!==n;document.querySelectorAll('[data-tab]').forEach(btn=>btn.classList.toggle('active',btn.dataset.tab===name));window.scrollTo(0,0);}
 async function addMark({date,at,manual=false,photo=null}){if(!user)throw new Error('Entre na sua conta antes de registrar.');const arr=recordsOf(date),labels=dayLabels(date,arr);if(arr.length>=labels.length)throw new Error('Todas as marcações deste dia já foram realizadas.');if(!validDay(date))throw new Error('Data inválida.');if(arr.length&&new Date(at)<new Date(arr.at(-1).at))throw new Error('O horário não pode ser anterior à marcação anterior.');if(arr.length&&new Date(at)-new Date(arr[0].at)>36*3600000)throw new Error('A jornada não pode ultrapassar 36 horas.');
  const plan=dayPlan(date,arr);const record={user_id:user.id,day:date,mark_idx:arr.length,at:new Date(at).toISOString(),manual,scheduled:plan.scheduled,goal_minutes:plan.goal_minutes,has_interval:plan.has_interval};let uploadedPath=null;
@@ -129,11 +242,159 @@ function openManual(){clearManualPhoto();const d=recordingDay();$('manualDate').
 function updateManual(){const d=$('manualDate').value;const a=validDay(d)?recordsOf(d):[];const labels=validDay(d)?dayLabels(d,a):LABELS4;$('manualStep').value=a.length<labels.length?labels[a.length]:'Jornada já concluída';}
 async function submitManual(e){e.preventDefault();const date=$('manualDate').value,t=$('manualTime').value;if(!validDay(date)||fromTime(t)===null)return notify('Informe data e hora válidas.',true);if(recordsOf(date).length>=dayLabels(date).length)return notify('Dia já concluído. Corrija pelo Histórico.',true);const d=parseDay(date);if($('manualNextDay').checked)d.setDate(d.getDate()+1);const [h,m]=t.split(':').map(Number);d.setHours(h,m,0,0);setBusy(true);try{await addMark({date,at:d,manual:true,photo:manualPhotoFile});hideModal('manualModal');}catch(e){fail(e);}finally{setBusy(false);render();}}
 async function showPicture(id){const m=marks.find(p=>p.id===id);if(!m?.photo_path)return;try{const {data,error}=await api.storage.from('ponto-fotos').createSignedUrl(m.photo_path,60);if(error)throw error;$('pictureView').src=data.signedUrl;$('pictureLabel').textContent=dateLabel(m.day)+' · '+timeOf(m.at);showModal('pictureModal');}catch(e){fail(e);}}
-function openDay(d){const a=recordsOf(d);if(!a.length)return;modalDay=d;const n=notes.find(n=>n.day===d);$('noteType').value=n?.kind||'';$('noteText').value=n?.description||'';$('dayModalTitle').textContent='Corrigir '+dateLabel(d);const p=dayPlan(d,a);$('editScheduled').checked=p.scheduled;$('editGoal').value=toTime(p.goal_minutes);$('editRows').innerHTML=a.map((m,i)=>{const stamp=new Date(m.at);const nextDay=dayKey(stamp)!==d;return `<div class="edit-row"><label class="field"><span>${dayLabels(d,a)[i]}${m.photo_path?' · Imagem anexada':''}</span><input class="edit-time" type="time" data-i="${i}" value="${timeOf(m.at)}" required></label><label class="inline-check"><input class="edit-next" data-i="${i}" type="checkbox" ${nextDay?'checked':''}> Ocorreu no dia seguinte</label>${m.photo_path?`<button type="button" class="simple-link" data-photo="${escapeHtml(m.id)}">Ver foto</button>`:''}</div>`;}).join('');showModal('dayModal');}
-async function saveDay(e){e.preventDefault();if(!modalDay||busy)return;const a=recordsOf(modalDay),p=dayPlan(modalDay,a),scheduled=$('editScheduled').checked,goal=fromTime($('editGoal').value);if(goal===null||goal===0&&scheduled)return notify('Informe uma meta válida.',true);const times=[...$('editRows').querySelectorAll('.edit-time')],updates=[];let last=0;
- for(let i=0;i<a.length;i++){const t=times[i].value,minutes=fromTime(t);if(minutes===null)return notify('Preencha todos os horários.',true);const date=parseDay(modalDay);if($('editRows').querySelector(`.edit-next[data-i="${i}"]`).checked)date.setDate(date.getDate()+1);date.setMinutes(minutes,0,0);const epoch=date.getTime();if(i&&epoch<last)return notify('Os horários devem estar em ordem.',true);last=epoch;const rec=a[i];updates.push({id:rec.id,user_id:user.id,day:modalDay,mark_idx:rec.mark_idx,at:date.toISOString(),manual:true,original_at:rec.original_at||(rec.at!==date.toISOString()?rec.at:null),scheduled,goal_minutes:goal,has_interval:p.has_interval,photo_path:rec.photo_path});}
- if(updates.length>1&&new Date(updates.at(-1).at)-new Date(updates[0].at)>36*3600000)return notify('Jornada superior a 36 horas.',true);
- setBusy(true);try{const {error}=await api.from('jornada_marks').upsert(updates,{onConflict:'id'});if(error)throw error;await refresh();hideModal('dayModal');notify('Horários corrigidos e banco recalculado.');}catch(e){fail(e);}finally{setBusy(false);}}
+function clearManagedPhotoSelection(){
+ managedPhotoFile=null;managedPhotoRemove=false;
+ if(managedPhotoUrl){URL.revokeObjectURL(managedPhotoUrl);managedPhotoUrl=null;}
+ $('managePhotoCamera').value='';$('managePhotoGallery').value='';
+}
+function closeManagedPhoto(){hideModal('managePhotoModal');clearManagedPhotoSelection();managedPhotoMarkId=null;$('managePhotoPreview').removeAttribute('src');}
+async function openManagedPhoto(id){
+ const m=marks.find(p=>String(p.id)===String(id));if(!m)return notify('Marcação não encontrada.',true);
+ clearManagedPhotoSelection();managedPhotoMarkId=m.id;
+ $('managePhotoLabel').textContent=`${dateLabel(m.day)} · ${dayLabels(m.day,recordsOf(m.day))[m.mark_idx]||'Ponto'} · ${timeOf(m.at)}`;
+ $('managePhotoMessage').textContent=m.photo_path?'Imagem anexada a esta marcação. Você pode visualizar, trocar ou remover.':'Ainda não há imagem nessa marcação.';
+ $('managePhotoPreview').hidden=true;$('managePhotoPlaceholder').hidden=false;
+ $('managePhotoPlaceholder').textContent=m.photo_path?'Carregando imagem…':'Nenhuma imagem anexada';
+ $('managePhotoRemove').disabled=!m.photo_path;
+ $('managePhotoSave').disabled=true;
+ showModal('managePhotoModal');
+ if(m.photo_path){
+  const requestedId=m.id,path=m.photo_path;
+  try{
+   const url=await signedPhotoUrl(m);
+   if(managedPhotoMarkId!==requestedId||managedPhotoFile||managedPhotoRemove)return;
+   if(!url)throw new Error('Imagem não encontrada.');
+   $('managePhotoPreview').src=url;$('managePhotoPreview').hidden=false;$('managePhotoPlaceholder').hidden=true;
+  }catch(e){
+   if(managedPhotoMarkId!==requestedId)return;
+   $('managePhotoPlaceholder').textContent='Imagem indisponível. Se ela ainda existir em outro navegador, faça backup antes de atualizar. Você pode anexar uma nova imagem aqui.';
+  }
+ }
+}
+function chooseManagedPhoto(file,source){
+ if(!file)return;
+ if(!file.type.startsWith('image/'))return notify('Selecione uma imagem válida.',true);
+ if(file.size>15*1024*1024||file.size===0)return notify('A imagem precisa ter de 1 byte até 15 MB.',true);
+ if(managedPhotoUrl)URL.revokeObjectURL(managedPhotoUrl);
+ managedPhotoFile=file;managedPhotoRemove=false;managedPhotoUrl=URL.createObjectURL(file);
+ $('managePhotoPreview').src=managedPhotoUrl;$('managePhotoPreview').hidden=false;$('managePhotoPlaceholder').hidden=true;
+ $('managePhotoMessage').textContent=`${source}: ${file.name}. Toque em Salvar imagem para confirmar.`;
+ $('managePhotoRemove').disabled=false;$('managePhotoSave').disabled=false;
+}
+function removeManagedPhoto(){
+ const m=marks.find(x=>x.id===managedPhotoMarkId);if(!m)return;
+ clearManagedPhotoSelection();
+ $('managePhotoPreview').removeAttribute('src');$('managePhotoPreview').hidden=true;
+ $('managePhotoPlaceholder').hidden=false;$('managePhotoPlaceholder').textContent='Sem imagem';
+ managedPhotoRemove=!!m.photo_path;
+ $('managePhotoSave').disabled=!managedPhotoRemove;
+ $('managePhotoRemove').disabled=true;
+ $('managePhotoMessage').textContent=managedPhotoRemove?'A imagem será desvinculada e removida ao salvar.':'Nenhuma imagem anexada.';
+}
+async function saveManagedPhoto(){
+ if(!managedPhotoMarkId||busy)return;
+ const m=marks.find(x=>x.id===managedPhotoMarkId&&x.user_id===user.id);
+ if(!m)return notify('Não foi possível localizar essa marcação.',true);
+ if(!managedPhotoFile&&!managedPhotoRemove)return;
+ const oldPath=m.photo_path||null;let newPath=null,dbUpdated=false;
+ setBusy(true);$('managePhotoSave').disabled=true;
+ try{
+  if(managedPhotoFile){
+   const jpeg=await normalizePhoto(managedPhotoFile);
+   newPath=`${user.id}/${self.crypto?.randomUUID?.()||'foto-'+Date.now()+'-'+Math.random().toString(36).slice(2)}.jpg`;
+   const {error:upError}=await api.storage.from('ponto-fotos').upload(newPath,jpeg,{contentType:'image/jpeg',upsert:false});
+   if(upError)throw upError;
+  }
+  const {data,error}=await api.from('jornada_marks').update({photo_path:newPath}).eq('user_id',user.id).eq('id',m.id).select('*').single();
+  if(error||!data)throw error||new Error('A marcação não foi localizada no banco.');
+  dbUpdated=true;
+  // A foto antiga é removida apenas depois que o novo vínculo foi confirmado.
+  if(oldPath&&oldPath!==newPath){
+   const result=await api.storage.from('ponto-fotos').remove([oldPath]);
+   if(result.error)console.warn('Imagem antiga não pôde ser excluída:',result.error);
+  }
+  closeManagedPhoto();
+  await refresh();refreshEditPhotoControls();
+  notify(newPath?'Imagem salva na marcação.':'Imagem removida da marcação.');
+ }catch(e){
+  // Não deixe imagem órfã se o registro não foi atualizado.
+  if(newPath&&!dbUpdated){try{await api.storage.from('ponto-fotos').remove([newPath]);}catch(err){console.warn(err);}}
+  fail(e);
+ }finally{setBusy(false);$('managePhotoSave').disabled=!managedPhotoFile&&!managedPhotoRemove;}
+}
+function editPhotoControls(m){
+ return `<div class="edit-photo-row">${m.photo_path?photoThumb(m):''}<button type="button" class="simple-link" data-manage-photo="${escapeHtml(m.id)}">${m.photo_path?'Ver / trocar / remover imagem':'Adicionar foto ou imagem'}</button></div>`;
+}
+function refreshEditPhotoControls(){
+ if(!modalDay||$('dayModal').hidden)return;
+ for(const el of $('editRows').querySelectorAll('[data-edit-photo-index]')){
+  const idx=Number(el.dataset.editPhotoIndex),m=recordsOf(modalDay).find(x=>x.mark_idx===idx);
+  if(m)el.innerHTML=editPhotoControls(m);
+ }
+ hydratePhotoThumbs($('editRows'));
+}
+// O editor mostra TODAS as etapas esperadas, inclusive as ainda não registradas.
+function openDay(d){
+ const a=recordsOf(d);if(!a.length)return;
+ modalDay=d;const n=notes.find(n=>n.day===d);
+ $('noteType').value=n?.kind||'';$('noteText').value=n?.description||'';
+ $('dayModalTitle').textContent='Corrigir '+dateLabel(d);
+ const p=dayPlan(d,a),labels=p.has_interval?LABELS4:LABELS2;
+ $('editScheduled').checked=p.scheduled;$('editGoal').value=toTime(p.goal_minutes);
+ $('editRows').innerHTML=labels.map((label,i)=>{
+  const m=a.find(x=>x.mark_idx===i),nextDay=m&&dayKey(new Date(m.at))!==d;
+  return `<div class="edit-row ${m?'':'edit-row-missing'}"><label class="field"><span>${label}${m?.photo_path?' · Imagem anexada':''}${m?'':' · Não registrada'}</span><input class="edit-time" type="time" data-i="${i}" value="${m?timeOf(m.at):''}" ${m?'required':''} aria-label="${label}" ${m?'':'placeholder="Opcional"'}></label><label class="inline-check"><input class="edit-next" data-i="${i}" type="checkbox" ${nextDay?'checked':''}> Ocorreu no dia seguinte</label>${m?`<div class="edit-photo-controls" data-edit-photo-index="${i}">${editPhotoControls(m)}</div>`:'<p class="photo-waiting-hint">Salve o horário para poder anexar uma imagem.</p>'}</div>`;
+ }).join('');
+ updateDayPreview();showModal('dayModal');hydratePhotoThumbs($('editRows'));
+}
+// Usa a data civil escolhida, sem aplicar fuso UTC à entrada manual.
+function editDate(d,clock,next){const stamp=parseDay(d),m=fromTime(clock);if(m===null)return null;if(next)stamp.setDate(stamp.getDate()+1);stamp.setHours(Math.floor(m/60),m%60,0,0);return stamp;}
+function collectEditDay(){
+ const a=recordsOf(modalDay),p=dayPlan(modalDay,a),labels=p.has_interval?LABELS4:LABELS2;
+ const scheduled=$('editScheduled').checked,goal=fromTime($('editGoal').value),rows=[];
+ if(goal===null||(scheduled&&goal===0))return {error:'Informe uma meta válida para este dia.'};
+ let missingFound=false,last=null;
+ for(let i=0;i<labels.length;i++){
+  const input=$('editRows').querySelector(`.edit-time[data-i="${i}"]`),m=a.find(x=>x.mark_idx===i),t=input.value;
+  if(!t){if(m)return {error:`Preencha ${labels[i]}: a marcação existente não pode ser apagada neste formulário.`};missingFound=true;continue;}
+  if(missingFound)return {error:`Preencha primeiro a marcação anterior antes de informar ${labels[i]}.`};
+  const date=editDate(modalDay,t,$('editRows').querySelector(`.edit-next[data-i="${i}"]`).checked);
+  if(!date)return {error:`Horário inválido em ${labels[i]}.`};
+  if(last&&date.getTime()<last.getTime())return {error:`O horário de ${labels[i]} deve ser posterior ao anterior.`};
+  last=date;rows.push({idx:i,record:m,at:date.toISOString()});
+ }
+ if(rows.length>1&&(new Date(rows.at(-1).at)-new Date(rows[0].at))>36*3600000)return {error:'Jornada superior a 36 horas. Revise horários e dias seguintes.'};
+ const completeNow=rows.length===labels.length;
+ let work=0,b=null;
+ if(completeNow){work=rows.length===2?minutes(rows[0].at,rows[1].at):minutes(rows[0].at,rows[1].at)+minutes(rows[2].at,rows[3].at);b=Math.round(work-(scheduled?goal:0));}
+ return {rows,p,scheduled,goal,completeNow,work,b,labels};
+}
+function updateDayPreview(){if(!modalDay)return;const state=collectEditDay(),box=$('editPreview');
+ if(state.error){box.className='edit-preview edit-warning';box.textContent=state.error;return;}
+ if(!state.completeNow){const missing=state.labels.length-state.rows.length;box.className='edit-preview';box.innerHTML=`<strong>Dia em andamento</strong><span>${missing} ${missing===1?'marcação pendente':'marcações pendentes'}. O saldo será calculado quando todas forem preenchidas.</span>`;return;}
+ box.className='edit-preview';box.innerHTML=`<strong>Dia completo</strong><span>${hr(state.work)} trabalhadas · <b class="${state.b<0?'negative':'positive'}">Saldo ${signed(state.b)}</b></span>`;
+}
+async function saveDay(e){
+ e.preventDefault();if(!modalDay||busy)return;
+ const state=collectEditDay();if(state.error)return notify(state.error,true);
+ const updates=state.rows.map(({idx,record,at})=>({
+  user_id:user.id,day:modalDay,mark_idx:idx,at,
+  manual:record?record.at!==at?true:!!record.manual:true,
+  original_at:record?(record.original_at||(record.at!==at?record.at:null)):null,
+  scheduled:state.scheduled,goal_minutes:state.goal,has_interval:state.p.has_interval,
+  photo_path:record?.photo_path||null
+ }));
+ const wasIncomplete=!complete(modalDay),added=state.rows.some(r=>!r.record);
+ setBusy(true);
+ try{
+  // A restrição única (user_id,day,mark_idx) atualiza existentes e insere as faltantes.
+  // Não alterar o ID das marcações já salvas: seus anexos e histórico permanecem vinculados.
+  const {error}=await api.from('jornada_marks').upsert(updates,{onConflict:'user_id,day,mark_idx'});
+  if(error)throw error;
+  await refresh();hideModal('dayModal');
+  notify(!state.completeNow?'Alterações salvas. O dia continua incompleto.':added&&wasIncomplete?'Marcação pendente adicionada. Banco de horas recalculado.':'Horários salvos e banco de horas recalculado.');
+ }catch(e){fail(e);}finally{setBusy(false);}
+}
 async function deleteDay(){if(!modalDay||busy)return;if(!confirm(`Excluir todas as marcações de ${dateLabel(modalDay)}? Esta ação não pode ser desfeita.`))return;const a=recordsOf(modalDay);setBusy(true);try{const {error}=await api.from('jornada_marks').delete().eq('user_id',user.id).eq('day',modalDay);if(error)throw error;const paths=a.filter(x=>x.photo_path).map(x=>x.photo_path);if(paths.length){const res=await api.storage.from('ponto-fotos').remove(paths);if(res.error)console.warn('Fotos não removidas:',res.error);}await refresh();hideModal('dayModal');notify('Dia excluído.');}catch(e){fail(e);}finally{setBusy(false);}}
 function scheduleFormVisibility(){const preset=$('schedulePreset').value;$('weeklySchedule').hidden=['12x36','custom'].includes(preset);$('customSchedule').hidden=preset!=='custom';$('rotatingSchedule').hidden=preset!=='12x36';$('intervalEstimateField').hidden=!$('hasInterval').checked;}
 function fillSettings(){const s=normSettings(profile.schedule);$('schedulePreset').value=s.preset;$('scheduleGoal').value=toTime(s.goalMinutes);$('rotationStart').value=s.rotationStart||today();$('rotationGoal').value=toTime(s.rotationGoal);$('hasInterval').checked=s.hasInterval!==false;$('breakGoal').value=toTime(s.breakMinutes);
@@ -145,7 +406,7 @@ function b64Blob(base64){const raw=atob(base64),bytes=new Uint8Array(raw.length)
 async function importLegacy(event){const file=event.target.files?.[0];event.target.value='';if(!file)return;if(marks.length){notify('Importação permitida somente em uma conta sem registros.',true);return;}if(file.size>60*1024*1024){notify('Backup acima de 60 MB não é suportado.',true);return;}
  setBusy(true);try{const data=JSON.parse(await file.text());if(data.app!=='Jornada+ pessoal'||![2,3,4].includes(data.version)||!Array.isArray(data.records))throw new Error('Não é um backup do Jornada+.');let selected='principal',s=normSettings(data.settings||DEFAULT),name=profile.name;
  if(data.version===4&&Array.isArray(data.profiles)){const choices=data.profiles.map((p,i)=>`${i+1}. ${p.name}`).join('\n'),index=data.profiles.length===1?1:Number(prompt('Qual pessoa deseja importar para ESTA conta?\n'+choices,'1'));if(!Number.isInteger(index)||index<1||index>data.profiles.length)throw new Error('Seleção cancelada ou inválida.');const p=data.profiles[index-1];selected=p.id;s=normSettings(p.settings);name=p.name;}
- const list=data.records.filter(x=>(x.profileId||'principal')===selected);if(list.length>1000)throw new Error('O backup excede 1.000 registros para importação.');if(!list.length)throw new Error('Essa pessoa não tem registros no backup.');if(!confirm(`Importar ${list.length} marcações de ${name} para a conta ${user.email}?`))return;
+ const list=data.records.filter(x=>(x.profileId||'principal')===selected);if(list.length>1000)throw new Error('O backup excede 1.000 registros para importação.');if(!list.length)throw new Error('Essa pessoa não tem registros no backup.');if(!confirm(`Importar ${list.length} marcações de ${name} para a conta @${user.user_metadata?.username||usernameOf(user.email?.split('@')[0])}?`))return;
  const upd=await api.from('jornada_profiles').update({name,schedule:s}).eq('id',user.id);if(upd.error)throw upd.error;profile={...profile,name,schedule:s};let imported=0;
  for(const m of list){if(!validDay(m.day)||!Number.isInteger(m.order)||m.order<0||m.order>3||Number.isNaN(Date.parse(m.at)))continue;let photo_path=null;
  if(m.photo){const blob=b64Blob(m.photo),jpeg=await normalizePhoto(blob);photo_path=`${user.id}/${self.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2)}.jpg`;const up=await api.storage.from('ponto-fotos').upload(photo_path,jpeg,{contentType:'image/jpeg'});if(up.error)throw up.error;}
@@ -281,19 +542,25 @@ function v5Setup(){try{applyTheme(localStorage.getItem('jornada_v5_theme')||'lig
  if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))navigator.serviceWorker.register('./sw.js').catch(console.warn);
 }
 
-function wire(){for(const mode of ['Login','Signup'])$('mode'+mode).addEventListener('click',()=>setAuthMode(mode==='Signup'?'signup':'login'));$('authForm').addEventListener('submit',onAuthSubmit);$('forgotPassword').addEventListener('click',forgot);$('requestReset').addEventListener('click',resetPassword);$('signOut').addEventListener('click',signOut);$('signOutTop').addEventListener('click',signOut);
+function wire(){for(const mode of ['Login','Signup'])$('mode'+mode).addEventListener('click',()=>setAuthMode(mode==='Signup'?'signup':'login'));$('authForm').addEventListener('submit',onAuthSubmit);$('forgotPassword').addEventListener('click',forgot);$('recoveryForm').addEventListener('submit',onRecoverSubmit);$('backLogin').addEventListener('click',()=>setAuthMode('login'));$('savedRecovery').addEventListener('change',e=>$('ackRecovery').disabled=!e.target.checked);$('copyRecovery').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(currentRecoveryCode);notify('Código copiado. Guarde em local seguro.');}catch{notify('Selecione e copie o código exibido.',true);}});$('ackRecovery').addEventListener('click',async()=>{if(!$('savedRecovery').checked)return;$('recoveryCodeModal').hidden=true;const task=nextRecoveryStep;nextRecoveryStep=null;currentRecoveryCode='';$('recoveryCodeText').textContent='';if(task)await task();});$('changeMyPassword').addEventListener('click',changePassword);$('requestReset').addEventListener('click',resetPassword);$('signOut').addEventListener('click',signOut);$('signOutTop').addEventListener('click',signOut);
  $('registerNow').addEventListener('click',()=>automatic());$('photoRegister').addEventListener('click',()=>$('cameraInput').click());$('cameraInput').addEventListener('change',e=>{const file=e.target.files?.[0];e.target.value='';if(file)automatic(file);});$('openManual').addEventListener('click',openManual);$('manualDate').addEventListener('change',updateManual);$('manualForm').addEventListener('submit',submitManual);
  $('manualTakePhoto').addEventListener('click',()=>$('manualCameraInput').click());
  $('manualChooseImage').addEventListener('click',()=>$('manualGalleryInput').click());
  $('manualCameraInput').addEventListener('change',e=>{chooseManualPhoto(e.target.files?.[0],'Foto da câmera');e.target.value='';});
  $('manualGalleryInput').addEventListener('change',e=>{chooseManualPhoto(e.target.files?.[0],'Imagem da galeria');e.target.value='';});
  $('manualRemovePhoto').addEventListener('click',clearManualPhoto);
- $('dayForm').addEventListener('submit',saveDay);$('deleteDay').addEventListener('click',deleteDay);$('saveNote').addEventListener('click',saveNote);$('saveSettings').addEventListener('click',saveSettings);$('schedulePreset').addEventListener('change',applyPreset);$('hasInterval').addEventListener('change',scheduleFormVisibility);$('importLegacy').addEventListener('click',()=>$('legacyFile').click());$('legacyFile').addEventListener('change',importLegacy);$('prevMonth').addEventListener('click',()=>shiftMonth(-1));$('nextMonth').addEventListener('click',()=>shiftMonth(1));$('exportCsv').addEventListener('click',exportCsv);$('printMonth').addEventListener('click',printMonth);$('calendarDayAction').addEventListener('click',calendarAction);$('enterDemo').addEventListener('click',enterDemo);$('clearDemo').addEventListener('click',clearDemo);
- document.addEventListener('click',e=>{const btn=e.target.closest('button');if(!btn)return;if(btn.dataset.go)selectTab(btn.dataset.go);if(btn.dataset.tab)selectTab(btn.dataset.tab);if(btn.dataset.edit)openDay(btn.dataset.edit);if(btn.dataset.photo)showPicture(btn.dataset.photo);if(btn.dataset.calendarDay)openCalendarDay(btn.dataset.calendarDay);if(btn.dataset.close)hideModal(btn.dataset.close);});document.querySelectorAll('.modal-backdrop').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)hideModal(el.id);}));document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-backdrop').forEach(m=>m.hidden=true);});}
+ $('managePhotoTake').addEventListener('click',()=>$('managePhotoCamera').click());
+ $('managePhotoChoose').addEventListener('click',()=>$('managePhotoGallery').click());
+ $('managePhotoCamera').addEventListener('change',e=>{chooseManagedPhoto(e.target.files?.[0],'Foto da câmera');e.target.value='';});
+ $('managePhotoGallery').addEventListener('change',e=>{chooseManagedPhoto(e.target.files?.[0],'Imagem da galeria');e.target.value='';});
+ $('managePhotoRemove').addEventListener('click',removeManagedPhoto);
+ $('managePhotoSave').addEventListener('click',saveManagedPhoto);
+ $('dayForm').addEventListener('submit',saveDay);$('dayForm').addEventListener('input',updateDayPreview);$('dayForm').addEventListener('change',updateDayPreview);$('deleteDay').addEventListener('click',deleteDay);$('saveNote').addEventListener('click',saveNote);$('saveSettings').addEventListener('click',saveSettings);$('schedulePreset').addEventListener('change',applyPreset);$('hasInterval').addEventListener('change',scheduleFormVisibility);$('importLegacy').addEventListener('click',()=>$('legacyFile').click());$('legacyFile').addEventListener('change',importLegacy);$('prevMonth').addEventListener('click',()=>shiftMonth(-1));$('nextMonth').addEventListener('click',()=>shiftMonth(1));$('exportCsv').addEventListener('click',exportCsv);$('printMonth').addEventListener('click',printMonth);$('calendarDayAction').addEventListener('click',calendarAction);$('enterDemo').addEventListener('click',enterDemo);$('clearDemo').addEventListener('click',clearDemo);
+ document.addEventListener('click',e=>{const btn=e.target.closest('button');if(!btn)return;if(btn.dataset.go)selectTab(btn.dataset.go);if(btn.dataset.tab)selectTab(btn.dataset.tab);if(btn.dataset.edit)openDay(btn.dataset.edit);if(btn.dataset.photo)showPicture(btn.dataset.photo);if(btn.dataset.managePhoto)openManagedPhoto(btn.dataset.managePhoto);if(btn.dataset.calendarDay)openCalendarDay(btn.dataset.calendarDay);if(btn.dataset.close){if(btn.dataset.close==='managePhotoModal')closeManagedPhoto();else hideModal(btn.dataset.close);}});document.querySelectorAll('.modal-backdrop').forEach(el=>el.addEventListener('click',e=>{if(e.target===el){if(el.id==='managePhotoModal')closeManagedPhoto();else hideModal(el.id);}}));document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.querySelectorAll('.modal-backdrop').forEach(m=>m.hidden=true);clearManagedPhotoSelection();managedPhotoMarkId=null;}});}
 async function boot(){wire();v5Setup();setAuthMode('login');clock();clockTimer=setInterval(clock,1000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)clock();});const config=window.JORNADA_SUPABASE||{};if(!config.url||!config.anonKey){$('configNotice').hidden=false;$('authSubmit').disabled=true;$('modeSignup').disabled=true;return;}
  if(!window.supabase){authMessage('Não foi possível carregar a biblioteca de conexão. Verifique a internet.',true);return;}
  try{realApi=window.supabase.createClient(config.url,config.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});api=realApi;
- realApi.auth.onAuthStateChange((event,session)=>{if(isDemo)return;if(event==='PASSWORD_RECOVERY'){setTimeout(()=>changePassword(),0);return;}if(event==='SIGNED_OUT'){exit();return;}if((event==='SIGNED_IN'||event==='INITIAL_SESSION')&&session?.user){setTimeout(()=>enter(session.user),0);}});
+ realApi.auth.onAuthStateChange((event,session)=>{if(isDemo)return;if(event==='SIGNED_OUT'){exit();return;}if((event==='SIGNED_IN'||event==='INITIAL_SESSION')&&session?.user){setTimeout(()=>enter(session.user),0);}});
  const {data,error}=await api.auth.getSession();if(error)throw error;if(data.session?.user)await enter(data.session.user);
  }catch(e){authMessage('Erro de conexão: '+e.message,true);}}
 boot();

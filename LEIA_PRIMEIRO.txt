@@ -1,61 +1,94 @@
-JORNADA+ V5.2 — WEB / PWA
-========================
+JORNADA+ V5.2 — OPERAÇÃO COM USUÁRIO E SENHA, SEM E-MAIL
+========================================================
 
-1. O QUE ESTÁ PRONTO
-- Relógio digital ao vivo (HH:MM:SS), data com dia da semana e segundos em destaque na aba Ponto
-- Login e cadastro por e-mail e senha (dependem de Supabase configurado)
-- Modo de demonstração local, sem servidor
-- Registro de ponto automático, manual e com foto opcional
-- NOVO: Registro manual permite tirar foto ou escolher imagem da galeria, com prévia e remoção antes de salvar
-- As fotos anexadas ao registro manual aparecem na consulta da marcação e no histórico
-- Cálculo de horas e saldo; intervalos e jornadas personalizadas
-- Previsão da saída; 12x36 e turnos que atravessam a meia-noite
-- Calendário mensal, histórico e correções identificadas
-- Banco de horas com gráfico de evolução semanal
-- Relatório de espelho de ponto / banco de horas
-- Exportação .xlsx real e impressão/salvamento PDF
-- Tema claro/escuro e estrutura de PWA para instalação via HTTPS
+Este é o Jornada+ operacional V5.2 atualizado. O layout e as funcionalidades
+anteriores continuam (ponto, foto opcional, banco, calendário, histórico, relatórios).
+A principal mudança é o login por NOME DE USUÁRIO e SENHA, com CÓDIGO de recuperação.
 
-2. TESTAR AGORA, SEM CONTA
-- No computador, abra o arquivo Jornada_Plus_V5_2_Demonstracao.html, entregue separadamente.
-- Ou publique os arquivos deste ZIP. Abra index.html e clique em "Experimentar demonstração".
-- Os dados de demonstração são armazenados SOMENTE neste navegador.
-- "Criar conta" NÃO funciona no modo de demonstração sem configurar Supabase.
+ATENÇÃO: NÃO É SUFICIENTE ENVIAR O HTML AO GITHUB.
+O cadastro real precisa do Supabase configurado e da Edge Function implantada.
+O modo 'Experimentar demonstração' continua funcionando sem servidor.
 
-3. ATIVAR CADASTRO REAL (IMPORTANTE)
-- Acesse https://supabase.com/dashboard e crie um projeto.
-- Abra SQL Editor > New query; execute o arquivo setup.sql.
-- Em Authentication > Sign In / Providers, habilite Email.
-- Copie Project URL e a chave PUBLICÁVEL (publishable/anon, não a secreta).
-- Edite config.js preenchendo url e anonKey, ou utilize CONFIGURADOR.html.
-- Publique a raiz deste ZIP no GitHub Pages.
-- Configure Authentication > URL Configuration > Site URL com o endereço do site publicado.
-- Ajuste também as URLs de redirecionamento para esse endereço.
-- Para confirmações por email de usuários externos, configure SMTP adequado no Supabase.
-- Teste duas contas diferentes para validar que registros e fotos não se misturam.
-- Nunca publique service_role nem outras chaves secretas no navegador.
+O QUE VAI NO GITHUB PAGES
+-------------------------
+index.html
+app.js
+styles.css
+sw.js
+config.js (apenas URL e chave pública/anon do Supabase)
+manifest.webmanifest
+icon.png
+icon-192.png
 
-4. GITHUB PAGES
-- Crie um repositório do Jornada+ no GitHub.
-- Extraia o ZIP e envie os arquivos da raiz, incluindo index.html, app.js,
-  styles.css, config.js, icons, manifest.webmanifest e sw.js.
-- Em Settings > Pages, selecione Deploy from a branch, branch main e pasta /root.
-- Aguarde o GitHub gerar o link. O app poderá ser instalado via menu do navegador.
-- GitHub Pages não é banco de dados: o Supabase é necessário para contas online.
+NÃO colocar senhas, RECOVERY_PEPPER ou SERVICE_ROLE em config.js.
+NÃO colocar .env com segredos no GitHub.
 
-5. OBSERVAÇÕES
-- O arquivo HTML de demonstração não cria contas reais, nem sincroniza com outros aparelhos.
-- O registro offline em contas online, notificações com o app fechado e biometria
-  não foram implementados nesta versão.
-- O cálculo considera apenas dias com as marcações completas; dias sem ponto
-  não são debitados automaticamente. Ajuste manualmente feriados/folgas.
-- Controle pessoal: NÃO substitui sistema oficial de ponto eletrônico.
-- Fotos e marcações manuais não comprovam autenticidade de horário ou identidade.
-- Não publique suas contas reais sem testar as regras de acesso e políticas de privacidade.
-- A conta demonstrativa é apenas local; não use registros de teste como evidência trabalhista.
+CONFIGURAÇÃO DO SUPABASE (UMA VEZ)
+---------------------------------
+1. Acesse https://supabase.com/dashboard e abra/crie o projeto Jornada+.
+2. No SQL Editor, execute o arquivo setup.sql fornecido neste pacote.
+   Se o projeto já tem as tabelas, o SQL foi escrito para poder ser reexecutado,
+   mas faça backup antes de executar em projeto com dados reais.
+3. No Supabase > Edge Functions, crie a função com o nome exato:
+   jornada-contas
+   Cole o código de supabase/functions/jornada-contas/index.ts.
+   Implante com VERIFY JWT DESABILITADO para essa função.
+   A função valida o token do usuário ao trocar o código de recuperação.
+4. Configure as variáveis secretas da Edge Function no painel Supabase:
+   JORNADA_RECOVERY_PEPPER = segredo aleatório de pelo menos 32 caracteres
+   JORNADA_ALLOWED_ORIGINS = https://andersonwesley09-alt.github.io
+   Atenção: o segundo valor é a ORIGEM do site (SEM /jornada-plus/).
+   O Supabase normalmente disponibiliza SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.
+   Confirme no painel da função; não publique a SERVICE_ROLE_KEY.
+5. Garanta que o provedor Email/Senha de Auth está habilitado.
+   Ninguém precisará INFORMAR um e-mail no aplicativo. O servidor gera um
+   identificador técnico reservado para usar com o Supabase Auth.
+6. Em Project Settings > API Keys, copie Project URL e a chave PÚBLICA
+   (publishable/anon). Preencha APENAS esses valores em config.js.
+7. Publique/atualize os oito arquivos de site no repositório
+   https://github.com/andersonwesley09-alt/jornada-plus.
+   Settings > Pages > Deploy from a branch > main > /(root).
+8. Abra https://andersonwesley09-alt.github.io/jornada-plus/
+   Teste CRIAR CONTA e guarde o código. Faça login e registre um ponto.
+   Crie uma segunda conta para verificar que os dados ficam separados.
 
-V5.2 — TESTE DE ANEXO MANUAL
-- Acesse Experimentar demonstração > Ponto > Informar horário manualmente.
-- Escolha Tirar foto ou Escolher imagem, confirme a prévia e salve o horário.
-- Em Marcações do dia ou Histórico > Ver/corrigir horários, abra o botão de foto.
-- Os anexos de demonstração ficam no navegador; para contas reais, é necessário ativar o Supabase e a política privada do bucket ponto-fotos.
+É possível usar o CLI se a tela de criação de funções não oferecer
+'Desabilitar verificação JWT':
+  npx.cmd supabase login
+  npx.cmd supabase link --project-ref SEU_PROJECT_REF
+  npx.cmd supabase functions deploy jornada-contas --no-verify-jwt
+Use somente o próprio projeto Supabase. Evite colar as chaves secretas em chats.
+
+REGRAS DO CADASTRO
+------------------
+Nome: 2 a 70 caracteres.
+Usuário: 4 a 24 caracteres, começa com letra, pode ter letras, números, _ e -.
+Senha: 10 a 128 caracteres.
+Código: gerado uma única vez (JP-XXXX-XXXX-XXXX-XXXX).
+Sem o código, não há recuperação automática se esquecer a senha.
+O código antigo perde a validade quando você o utiliza ou gera outro.
+Não compartilhe fotos, senhas ou código de recuperação.
+
+DADOS EXISTENTES
+---------------
+Esta atualização não apaga registros existentes na conta de demonstração.
+No entanto, os dados de demonstração são locais e NÃO migram automaticamente
+para uma conta online. Contas anteriores criadas com e-mail também NÃO se
+convertem automaticamente para nome de usuário. Preserve seus backups.
+
+SEGURANÇA / LANÇAMENTO PÚBLICO
+-----------------------------
+- O código de recuperação é salvo no servidor apenas como HMAC SHA-256 com
+  segredo privado; nunca em texto simples no banco nem no GitHub.
+- O banco aplica RLS para isolar registros e fotos de cada usuário.
+- A função impõe limites básicos de tentativas. Para lançamento público,
+  adicionar CAPTCHA e proteção contra automação/WAF é recomendado.
+- Se usar projeto antigo com dados de produção, faça backup do banco antes
+  de executar SQL e valide com duas contas de teste.
+- O app não é um relógio eletrônico oficial de ponto.
+
+STATUS DOS TESTES
+----------------
+O login/cadastro/recuperação foi verificado no navegador com SERVIDOR SIMULADO.
+Não foi possível validar um projeto Supabase REAL sem as suas credenciais;
+a ativação online depende dos passos acima.

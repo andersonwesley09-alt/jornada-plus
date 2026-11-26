@@ -1,0 +1,2 @@
+[functions.jornada-contas]
+verify_jwt = false

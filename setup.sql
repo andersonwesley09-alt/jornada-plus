@@ -104,3 +104,28 @@ grant select, insert, update, delete on public.jornada_notes to authenticated;
 revoke all on public.jornada_profiles from anon;
 revoke all on public.jornada_marks from anon;
 revoke all on public.jornada_notes from anon;
+
+-- JORNADA+ V5.2 — CADASTRO POR USUÁRIO, SEM E-MAIL INFORMADO
+-- Reexecute todo este SQL no SQL Editor após criar um projeto Supabase.
+-- A função Edge é a ÚNICA autorizada a consultar/alterar códigos de recuperação.
+create table if not exists public.jornada_account_recovery (
+ user_id uuid primary key references auth.users(id) on delete cascade,
+ username text not null unique check (username ~ '^[a-z][a-z0-9_-]{3,23}$'),
+ code_hash text not null,
+ changed_at timestamptz not null default now()
+);
+create table if not exists public.jornada_auth_attempts (
+ id bigint generated always as identity primary key,
+ action text not null check (action in ('register','recover','rotate')),
+ ip_hash text not null,
+ identifier_hash text not null,
+ created_at timestamptz not null default now()
+);
+create index if not exists jornada_auth_attempts_lookup on public.jornada_auth_attempts(action,ip_hash,created_at desc);
+create index if not exists jornada_auth_attempts_identifier on public.jornada_auth_attempts(action,identifier_hash,created_at desc);
+alter table public.jornada_account_recovery enable row level security;
+alter table public.jornada_auth_attempts enable row level security;
+-- Nenhuma policy: clientes anon/authenticated NÃO podem ler, inserir, alterar ou excluir os códigos.
+revoke all on public.jornada_account_recovery from PUBLIC, anon, authenticated;
+revoke all on public.jornada_auth_attempts from PUBLIC, anon, authenticated;
+-- NÃO criar políticas permissivas nessas tabelas. O service_role do servidor usa bypass de RLS.

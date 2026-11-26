@@ -1,0 +1,48 @@
+JORNADA+ V5.2 — PROJETO COMPLETO EM UM ÚNICO ZIP
+====================================================
+
+Esta pasta contém o aplicativo original V5.2, as correções de foto,
+o cadastro por NOME DE USUÁRIO e senha, e a configuração de banco Supabase.
+Nenhum arquivo funcional foi alterado ao criar este pacote.
+
+1. TESTAR SEM CADASTRO REAL
+   Abra ABRIR_DEMONSTRACAO.html no navegador e entre na demonstração.
+
+2. PUBLICAR NO GITHUB PAGES
+   Envie APENAS os seguintes arquivos, diretamente para a raiz do
+   repositório jornada-plus:
+     index.html
+     app.js
+     styles.css
+     sw.js
+     config.js
+     manifest.webmanifest
+     icon.png
+     icon-192.png
+   Acesse Settings > Pages > Deploy from a branch > main > /(root).
+   Se já houver um config.js com Supabase configurado no GitHub,
+   PRESERVE aquele arquivo em vez de substituí-lo pelo modelo vazio.
+
+3. CONFIGURAR BANCO E CADASTRO REAL NO SUPABASE
+   - Execute setup.sql no SQL Editor de um projeto Supabase de sua conta.
+   - Implante a função supabase/functions/jornada-contas/index.ts
+     como uma Edge Function chamada jornada-contas.
+   - Configure os segredos conforme LEIA_PRIMEIRO.txt e README.md.
+   - Preencha config.js SOMENTE com a URL e a chave PUBLICÁVEL/anon.
+   - NÃO envie a service_role key, senhas ou outros segredos ao GitHub.
+   - Teste cadastro, login, recuperação de senha e isolamento entre
+     duas contas antes de disponibilizar o aplicativo para outras pessoas.
+
+4. ONDE ESTÃO OS ARQUIVOS
+   Aplicativo web: arquivos .html, .js, .css, ícones, manifesto, sw.js
+   Banco de dados e políticas RLS: setup.sql
+   Autenticação sem e-mail: supabase/functions/jornada-contas/index.ts
+   Configuração da função: supabase/config.toml
+   Configurador de conexão: CONFIGURADOR.html
+   Documentação técnica: README.md, LEIA_PRIMEIRO.txt
+
+AVISOS
+   GitHub Pages hospeda só o site; não executa o SQL nem a função.
+   A conta real ainda precisa de Supabase configurado e testado.
+   A demonstração não sincroniza os pontos entre aparelhos.
+   Faça backup antes de migrar registros existentes ou alterar o banco.
