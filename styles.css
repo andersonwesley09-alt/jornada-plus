@@ -117,3 +117,14 @@ body.theme-dark .photo-thumb,body.theme-dark .photo-manager-display{background:v
 .recovery-code-modal .primary{margin-top:15px}
 body.theme-dark .recovery-code-modal .recovery-code{background:#1b2c4e;color:#c5dbff;border-color:#4f70b8}
 #recoveryForm .primary{margin-top:10px}
+
+/* Jornada+ V5.3 — jornada variável e rodapé */
+.custom-day-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:end}
+.custom-day-row label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;font-weight:700}
+.custom-day-row input{width:100%;min-width:0}
+#customSchedule.preset-preview{opacity:.83}
+.jornada-footer{margin:28px auto 100px;padding:18px 14px;text-align:center;border-top:1px solid var(--border);color:var(--muted);display:flex;align-items:center;flex-direction:column;gap:6px;font-size:12px;line-height:1.6}
+.jornada-footer strong{font-size:16px;color:var(--text)}
+.jornada-footer small{font-size:11px;max-width:440px}
+@media(max-width:360px){.custom-day-row{grid-template-columns:1fr}}
+@media print{.jornada-footer{display:none}}

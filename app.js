@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-const DEFAULT={preset:'6x1',goalMinutes:480,weekdays:[false,true,true,true,true,true,true],weeklyGoals:[0,480,480,480,480,480,480],rotationStart:'',rotationGoal:720,hasInterval:true,breakMinutes:60};
+const DEFAULT={preset:'6x1',goalMinutes:480,weekdays:[false,true,true,true,true,true,true],weeklyGoals:[0,480,480,480,480,480,480],rotationStart:'',rotationGoal:720,hasInterval:true,breakMinutes:60,weeklyBreaks:null};
 const WEEK=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const FULL=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 const LABELS4=['Entrada','Saída para intervalo','Retorno do intervalo','Saída'];
@@ -22,9 +22,31 @@ function notify(message,error=false){const t=$('toast');t.textContent=message;t.
 function authMessage(message,isError=false){const el=$('authMessage');el.hidden=false;el.classList.toggle('error',isError);el.textContent=message;}
 function fail(error,fallback='Ocorreu um erro.'){console.error(error);notify((error&&error.message)||fallback,true);}
 function dateLabel(s){return parseDay(s).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});}
-function normSettings(s={}){return {...DEFAULT,...(s||{}),weekdays:Array.isArray(s?.weekdays)&&s.weekdays.length===7?[...s.weekdays]:[...DEFAULT.weekdays],weeklyGoals:Array.isArray(s?.weeklyGoals)&&s.weeklyGoals.length===7?[...s.weeklyGoals]:[...DEFAULT.weeklyGoals],breakMinutes:s?.breakMinutes===undefined?60:Math.max(0,Math.min(720,Number(s.breakMinutes)||0))};}
-function presetSettings(preset){const s=normSettings(DEFAULT);s.preset=preset;s.rotationStart=today();switch(preset){case '5x2':s.weekdays=[false,true,true,true,true,true,false];break;case '6x1':s.weekdays=[false,true,true,true,true,true,true];break;case 'parcial6':s.goalMinutes=360;s.weekdays=[false,true,true,true,true,true,true];break;case 'parcial4':s.goalMinutes=240;s.weekdays=[false,true,true,true,true,true,false];s.hasInterval=false;break;case '12x36':s.rotationGoal=720;break;case 'custom':s.weeklyGoals=[0,480,480,480,480,480,0];break;case 'livre':s.weekdays=[false,true,true,true,true,true,false];break;}return s;}
-function scheduleForDay(d,s=profile?.schedule||DEFAULT){s=normSettings(s);const day=parseDay(d).getDay();let goal=0;if(s.preset==='custom')goal=Number(s.weeklyGoals[day])||0;else if(s.preset==='12x36'){
+function normSettings(s={}){return {...DEFAULT,...(s||{}),weekdays:Array.isArray(s?.weekdays)&&s.weekdays.length===7?[...s.weekdays]:[...DEFAULT.weekdays],weeklyGoals:Array.isArray(s?.weeklyGoals)&&s.weeklyGoals.length===7?[...s.weeklyGoals]:[...DEFAULT.weeklyGoals],breakMinutes:s?.breakMinutes===undefined?60:Math.max(0,Math.min(720,Number(s.breakMinutes)||0)),weeklyBreaks:Array.isArray(s?.weeklyBreaks)&&s.weeklyBreaks.length===7?s.weeklyBreaks.map(x=>Math.max(0,Math.min(720,Number(x)||0))):null};}
+function presetSettings(preset){
+ const s=normSettings(DEFAULT);s.preset=preset;s.rotationStart=today();
+ switch(preset){
+  case '5x2':case '5x2_40':s.goalMinutes=480;s.weekdays=[false,true,true,true,true,true,false];break;
+  case '5x2_44':s.goalMinutes=528;s.weekdays=[false,true,true,true,true,true,false];break;
+  case '6x1_44':s.weekdays=[false,true,true,true,true,true,true];s.weeklyGoals=[0,480,480,480,480,480,240];s.weeklyBreaks=[0,120,120,120,120,120,15];s.breakMinutes=120;break;
+  case '6x1_44_uniform':s.weekdays=[false,true,true,true,true,true,true];s.goalMinutes=440;break;
+  case '6x1':s.weekdays=[false,true,true,true,true,true,true];break;
+  case 'parcial6':s.goalMinutes=360;s.weekdays=[false,true,true,true,true,true,true];break;
+  case 'parcial4':s.goalMinutes=240;s.weekdays=[false,true,true,true,true,true,false];s.hasInterval=false;break;
+  case '12x36':s.rotationGoal=720;break;
+  case 'custom':s.weeklyGoals=[0,480,480,480,480,480,240];s.weeklyBreaks=[0,120,120,120,120,120,15];s.breakMinutes=120;break;
+  case 'livre':s.weekdays=[false,true,true,true,true,true,false];break;
+ }
+ return s;
+}
+function configuredBreakMinutes(d,settings=profile?.schedule||DEFAULT){
+ const s=normSettings(settings),day=parseDay(d).getDay();
+ if(!s.hasInterval)return 0;
+ if(s.preset==='6x1_44')return day===6?15:day===0?0:120;
+ if(s.preset==='custom'&&s.weeklyBreaks)return s.weeklyBreaks[day];
+ return s.breakMinutes;
+}
+function scheduleForDay(d,s=profile?.schedule||DEFAULT){s=normSettings(s);const day=parseDay(d).getDay();let goal=0;if(s.preset==='custom'||s.preset==='6x1_44')goal=Number(s.weeklyGoals[day])||0;else if(s.preset==='12x36'){
  const anchor=validDay(s.rotationStart)?parseDay(s.rotationStart):parseDay(today());const p=parseDay(d);const diff=Math.round((Date.UTC(p.getFullYear(),p.getMonth(),p.getDate())-Date.UTC(anchor.getFullYear(),anchor.getMonth(),anchor.getDate()))/86400000);goal=(diff>=0&&diff%2===0)?Number(s.rotationGoal)||720:0;
 }else goal=s.weekdays[day]?(Number(s.goalMinutes)||480):0;
 return {scheduled:goal>0,goal_minutes:goal>0?goal:Number(s.preset==='12x36'?s.rotationGoal:s.goalMinutes)||480,has_interval:s.hasInterval!==false};}
@@ -43,7 +65,7 @@ function predictedExit(d,arr=recordsOf(d)){
  if(!plan.scheduled||!Number.isFinite(goal)||goal<=0||!Number.isFinite(first.getTime()))return null;
  let time=first.getTime()+goal*60000,note='Sem intervalo',estimated=false;
  if(plan.has_interval){
-  const breakMin=normSettings(profile?.schedule).breakMinutes;
+  const breakMin=configuredBreakMinutes(d);
   if(arr.length>=3){
    const workedBeforeBreak=minutes(arr[0].at,arr[1].at);
    time=new Date(arr[2].at).getTime()+Math.max(0,goal-workedBeforeBreak)*60000;
@@ -396,12 +418,51 @@ async function saveDay(e){
  }catch(e){fail(e);}finally{setBusy(false);}
 }
 async function deleteDay(){if(!modalDay||busy)return;if(!confirm(`Excluir todas as marcações de ${dateLabel(modalDay)}? Esta ação não pode ser desfeita.`))return;const a=recordsOf(modalDay);setBusy(true);try{const {error}=await api.from('jornada_marks').delete().eq('user_id',user.id).eq('day',modalDay);if(error)throw error;const paths=a.filter(x=>x.photo_path).map(x=>x.photo_path);if(paths.length){const res=await api.storage.from('ponto-fotos').remove(paths);if(res.error)console.warn('Fotos não removidas:',res.error);}await refresh();hideModal('dayModal');notify('Dia excluído.');}catch(e){fail(e);}finally{setBusy(false);}}
-function scheduleFormVisibility(){const preset=$('schedulePreset').value;$('weeklySchedule').hidden=['12x36','custom'].includes(preset);$('customSchedule').hidden=preset!=='custom';$('rotatingSchedule').hidden=preset!=='12x36';$('intervalEstimateField').hidden=!$('hasInterval').checked;}
+function scheduleFormVisibility(){const preset=$('schedulePreset').value;$('weeklySchedule').hidden=['12x36','custom','6x1_44'].includes(preset);$('customSchedule').hidden=!['custom','6x1_44'].includes(preset);$('rotatingSchedule').hidden=preset!=='12x36';$('intervalEstimateField').hidden=!$('hasInterval').checked||['6x1_44','custom'].includes(preset);$('customSchedule').querySelectorAll('input').forEach(input=>{input.disabled=preset==='6x1_44';});$('customSchedule').classList.toggle('preset-preview',preset==='6x1_44');}
 function fillSettings(){const s=normSettings(profile.schedule);$('schedulePreset').value=s.preset;$('scheduleGoal').value=toTime(s.goalMinutes);$('rotationStart').value=s.rotationStart||today();$('rotationGoal').value=toTime(s.rotationGoal);$('hasInterval').checked=s.hasInterval!==false;$('breakGoal').value=toTime(s.breakMinutes);
- $('weekdays').innerHTML=WEEK.map((day,i)=>`<label>${day}<input data-day="${i}" type="checkbox" ${s.weekdays[i]?'checked':''}></label>`).join('');$('customDays').innerHTML=FULL.map((day,i)=>`<label>${day}<input data-day="${i}" type="time" value="${toTime(s.weeklyGoals[i])}"></label>`).join('');scheduleFormVisibility();}
-function applyPreset(){const preset=$('schedulePreset').value;const s=presetSettings(preset);$('scheduleGoal').value=toTime(s.goalMinutes);$('rotationStart').value=s.rotationStart;$('rotationGoal').value=toTime(s.rotationGoal);$('hasInterval').checked=s.hasInterval;$('breakGoal').value=toTime(s.breakMinutes);$('weekdays').innerHTML=WEEK.map((day,i)=>`<label>${day}<input data-day="${i}" type="checkbox" ${s.weekdays[i]?'checked':''}></label>`).join('');$('customDays').innerHTML=FULL.map((day,i)=>`<label>${day}<input data-day="${i}" type="time" value="${toTime(s.weeklyGoals[i])}"></label>`).join('');scheduleFormVisibility();}
-async function saveSettings(){if(!user||busy)return;const preset=$('schedulePreset').value,name=$('profileName').value.trim(),s=normSettings(profile.schedule);if(name.length<2)return notify('Informe um nome.',true);s.preset=preset;s.hasInterval=$('hasInterval').checked;s.breakMinutes=fromTime($('breakGoal').value);if(s.breakMinutes===null)return notify('Informe um intervalo previsto válido.',true);if(preset==='12x36'){s.rotationStart=$('rotationStart').value;s.rotationGoal=fromTime($('rotationGoal').value);if(!validDay(s.rotationStart)||!s.rotationGoal)return notify('Preencha a data e meta do plantão.',true);}else if(preset==='custom'){s.weeklyGoals=[...$('customDays').querySelectorAll('input')].map(x=>fromTime(x.value));if(s.weeklyGoals.length!==7||s.weeklyGoals.some(n=>n===null))return notify('Preencha as metas da semana.',true);}else{s.goalMinutes=fromTime($('scheduleGoal').value);s.weekdays=[...$('weekdays').querySelectorAll('input')].map(x=>x.checked);if(!s.goalMinutes||s.weekdays.length!==7)return notify('Informe a meta e os dias de trabalho.',true);}
- setBusy(true);try{const {data,error}=await api.from('jornada_profiles').update({name,schedule:s}).eq('id',user.id).select('*').single();if(error)throw error;profile=data;render();notify('Jornada salva com sucesso!');}catch(e){fail(e);}finally{setBusy(false);}}
+ $('weekdays').innerHTML=WEEK.map((day,i)=>`<label>${day}<input data-day="${i}" type="checkbox" ${s.weekdays[i]?'checked':''}></label>`).join('');$('customDays').innerHTML=FULL.map((day,i)=>`<div class="custom-day-row"><label>${day}<input data-day="${i}" type="time" value="${toTime(s.weeklyGoals[i])}" aria-label="Meta de ${day}"></label><label>Intervalo<input class="day-break" data-break-day="${i}" type="time" value="${toTime(s.weeklyBreaks?.[i]??s.breakMinutes)}" aria-label="Intervalo de ${day}"></label></div>`).join('');scheduleFormVisibility();}
+function applyPreset(){const preset=$('schedulePreset').value;const s=presetSettings(preset);$('scheduleGoal').value=toTime(s.goalMinutes);$('rotationStart').value=s.rotationStart;$('rotationGoal').value=toTime(s.rotationGoal);$('hasInterval').checked=s.hasInterval;$('breakGoal').value=toTime(s.breakMinutes);$('weekdays').innerHTML=WEEK.map((day,i)=>`<label>${day}<input data-day="${i}" type="checkbox" ${s.weekdays[i]?'checked':''}></label>`).join('');$('customDays').innerHTML=FULL.map((day,i)=>`<div class="custom-day-row"><label>${day}<input data-day="${i}" type="time" value="${toTime(s.weeklyGoals[i])}" aria-label="Meta de ${day}"></label><label>Intervalo<input class="day-break" data-break-day="${i}" type="time" value="${toTime(s.weeklyBreaks?.[i]??s.breakMinutes)}" aria-label="Intervalo de ${day}"></label></div>`).join('');scheduleFormVisibility();}
+async function saveSettings(){
+ if(!user||busy)return;
+ const preset=$('schedulePreset').value,name=$('profileName').value.trim(),s=normSettings(profile.schedule);
+ if(name.length<2)return notify('Informe um nome.',true);
+ s.preset=preset;s.hasInterval=$('hasInterval').checked;s.breakMinutes=fromTime($('breakGoal').value);
+ if(s.breakMinutes===null)return notify('Informe um intervalo previsto válido.',true);
+ if(preset==='12x36'){
+  s.rotationStart=$('rotationStart').value;s.rotationGoal=fromTime($('rotationGoal').value);
+  if(!validDay(s.rotationStart)||!s.rotationGoal)return notify('Preencha a data e meta do plantão.',true);
+ }else if(preset==='custom'){
+  s.weeklyGoals=[...$('customDays').querySelectorAll('input[data-day]')].map(x=>fromTime(x.value));
+  s.weeklyBreaks=[...$('customDays').querySelectorAll('input[data-break-day]')].map(x=>fromTime(x.value));
+  if(s.weeklyGoals.length!==7||s.weeklyGoals.some(n=>n===null)||s.weeklyBreaks.length!==7||s.weeklyBreaks.some(n=>n===null))return notify('Preencha as metas e intervalos da semana.',true);
+ }else if(preset==='6x1_44'){
+  Object.assign(s,{weeklyGoals:[0,480,480,480,480,480,240],weeklyBreaks:[0,120,120,120,120,120,15],breakMinutes:120,hasInterval:true});
+ }else{
+  s.goalMinutes=fromTime($('scheduleGoal').value);s.weekdays=[...$('weekdays').querySelectorAll('input')].map(x=>x.checked);
+  if(!s.goalMinutes||s.weekdays.length!==7)return notify('Informe a meta e os dias de trabalho.',true);
+  s.weeklyBreaks=null;
+ }
+ // A primeira marcação grava a meta do dia. Atualização só com confirmação explícita.
+ const currentDay=recordingDay(),currentMarks=recordsOf(currentDay),newPlan=scheduleForDay(currentDay,s),oldPlan=dayPlan(currentDay,currentMarks);
+ const changedToday=currentMarks.length>0&&(Boolean(newPlan.scheduled)!==Boolean(oldPlan.scheduled)||Number(newPlan.goal_minutes)!==Number(oldPlan.goal_minutes));
+ let recalcToday=false;
+ if(changedToday){
+  recalcToday=confirm(`Há ${currentMarks.length} marcação(ões) em ${dateLabel(currentDay)}.\n\nOK: atualizar a meta de hoje para ${newPlan.scheduled?hr(newPlan.goal_minutes):'folga'}, preservando horários e fotos.\nCancelar: aplicar somente às próximas jornadas.\n\nRegistros de dias anteriores não serão modificados.`);
+ }
+ setBusy(true);
+ try{
+  const {data,error}=await api.from('jornada_profiles').update({name,schedule:s}).eq('id',user.id).select('*').single();
+  if(error)throw error;
+  profile=data;
+  if(recalcToday){
+   // Mantém o formato já iniciado (2 ou 4 marcações) para não invalidar o histórico.
+   const {error:markError}=await api.from('jornada_marks').update({scheduled:newPlan.scheduled,goal_minutes:newPlan.goal_minutes}).eq('user_id',user.id).eq('day',currentDay);
+   if(markError){await loadMarks();render();throw new Error('A jornada foi salva, mas a meta do dia não pôde ser atualizada. '+markError.message);}
+   await loadMarks();
+  }
+  render();notify(recalcToday?'Jornada salva e meta de hoje recalculada.':'Jornada salva. Registros anteriores preservados.');
+ }catch(e){fail(e);}finally{setBusy(false);}
+}
 function b64Blob(base64){const raw=atob(base64),bytes=new Uint8Array(raw.length);for(let i=0;i<bytes.length;i++)bytes[i]=raw.charCodeAt(i);return new Blob([bytes],{type:'image/jpeg'});}
 async function importLegacy(event){const file=event.target.files?.[0];event.target.value='';if(!file)return;if(marks.length){notify('Importação permitida somente em uma conta sem registros.',true);return;}if(file.size>60*1024*1024){notify('Backup acima de 60 MB não é suportado.',true);return;}
  setBusy(true);try{const data=JSON.parse(await file.text());if(data.app!=='Jornada+ pessoal'||![2,3,4].includes(data.version)||!Array.isArray(data.records))throw new Error('Não é um backup do Jornada+.');let selected='principal',s=normSettings(data.settings||DEFAULT),name=profile.name;
